@@ -72,6 +72,12 @@ python app.py
 ```
 
 ## Notes & next steps
+- **Python version (important):** Render defaults to the newest Python (3.14),
+  which breaks `psycopg2-binary`. This repo pins **3.12.3** via the
+  `.python-version` file. If you configured the service manually before this
+  file existed, either redeploy after pushing it, or add an env var
+  `PYTHON_VERSION=3.12.3` in Render → Environment. Then use
+  **Manual Deploy → Clear build cache & deploy**.
 - **Free-tier sleep:** Render free web services sleep after inactivity; the first
   visit after sleep takes ~30–50s. Upgrade to Starter to remove this.
 - **Custom domain:** Render → Settings → Custom Domains (add formula2solution.com,
