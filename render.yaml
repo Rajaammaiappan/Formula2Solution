@@ -1,0 +1,18 @@
+# Render Blueprint — deploy with "New > Blueprint" pointing at this repo
+services:
+  - type: web
+    name: formula2solution
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --workers 2 --timeout 60
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        sync: false          # paste your Supabase pooler connection string in the dashboard
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ADMIN_KEY
+        generateValue: true  # used for the optional /api/requests listing endpoint
+      - key: PYTHON_VERSION
+        value: 3.12.3
