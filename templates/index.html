@@ -888,7 +888,7 @@ footer{border-top:1px solid var(--line);background:var(--carbon-2);position:rela
     <div class="reveal">
       <span class="eyebrow">Start your engine</span>
       <h2 class="sec-title">Tell us what's slowing you down</h2>
-      <p class="sec-sub">Describe the process, the pain, or the idea. We'll reply within one business day with first thoughts — no sales funnel, just a straight conversation.</p>
+      <p class="sec-sub">No long forms. Leave your name and phone number and we'll call you within one business day — a straight conversation about the process, the pain, or the idea.</p>
     </div>
     <div class="contact-grid">
       <div class="c-info reveal d1">
@@ -912,52 +912,16 @@ footer{border-top:1px solid var(--line);background:var(--carbon-2);position:rela
 
       <div class="form-panel reveal d2">
         <form id="cform" novalidate>
-          <div class="fg-row">
-            <div class="fgrp"><label for="cName">Full name *</label><input id="cName" class="fin" type="text" placeholder="Your name" autocomplete="name"><div class="ferr">Enter your name</div></div>
-            <div class="fgrp"><label for="cEmail">Work email *</label><input id="cEmail" class="fin" type="email" placeholder="you@company.com" autocomplete="email"><div class="ferr">Enter a valid email</div></div>
-            <div class="fgrp"><label for="cOrg">Organization</label><input id="cOrg" class="fin" type="text" placeholder="Company / team name" autocomplete="organization"></div>
-            <div class="fgrp"><label for="cSvc">What do you need? *</label>
-              <select id="cSvc" class="fsel">
-                <option value="">Select a service…</option>
-                <option>Personal career automation (Pit Crew)</option>
-                <option>Custom software development</option>
-                <option>Process / task automation</option>
-                <option>Continuous improvement (CI / Lean)</option>
-                <option>Data & integration</option>
-                <option>Website / digital presence</option>
-                <option>Not sure yet — help me figure it out</option>
-              </select>
-              <div class="ferr">Pick the closest option</div>
-            </div>
-          </div>
-          <div class="fgrp"><label for="cMsg">Describe the process or problem *</label>
-            <textarea id="cMsg" class="ftxt" placeholder="Example: Every week our team spends a full day compiling reports from three systems into one Excel file. Errors are common and it delays everything downstream…"></textarea>
-            <div class="ferr">Tell us a little about the problem</div>
-          </div>
-          <div class="fg-row">
-            <div class="fgrp"><label for="cBudget">Budget range (optional)</label>
-              <select id="cBudget" class="fsel">
-                <option value="">Select…</option>
-                <option>Under ₹50K</option>
-                <option>₹50K – ₹1.5L</option>
-                <option>₹1.5L – ₹5L</option>
-                <option>₹5L+ / ongoing program</option>
-              </select>
-            </div>
-            <div class="fgrp"><label for="cWhen">Timeline</label>
-              <select id="cWhen" class="fsel">
-                <option>Flexible</option>
-                <option>Within a month</option>
-                <option>Urgent — this week</option>
-              </select>
-            </div>
-          </div>
+          <h4 style="font-size:1.05rem;font-weight:600;margin-bottom:6px;">Request a callback</h4>
+          <p style="color:var(--muted);font-size:.84rem;line-height:1.7;margin-bottom:22px;">Just your name and number — we'll call you within one business day to hear what's slowing you down.</p>
+          <div class="fgrp"><label for="cName">Full name *</label><input id="cName" class="fin" type="text" placeholder="Your name" autocomplete="name"><div class="ferr">Enter your name</div></div>
+          <div class="fgrp"><label for="cPhone">Phone number *</label><input id="cPhone" class="fin" type="tel" inputmode="tel" placeholder="+91 98765 43210" autocomplete="tel"><div class="ferr">Enter a valid phone number</div></div>
           <div class="consent">
             <input type="checkbox" id="cOk">
-            <label for="cOk">I'm happy to be contacted by email about this request. Details shared here are treated as confidential.</label>
+            <label for="cOk">I'm happy to receive a call about my request. My details stay confidential and are never shared.</label>
           </div>
-          <button type="submit" class="btn btn-red" id="sendBtn" style="width:100%;justify-content:center;padding:15px;"><i class="fa-solid fa-paper-plane"></i><span>Send request</span></button>
-          <p style="text-align:center;color:var(--muted);font-size:.76rem;margin-top:14px;">Reply within one business day. No spam, ever.</p>
+          <button type="submit" class="btn btn-red" id="sendBtn" style="width:100%;justify-content:center;padding:15px;"><i class="fa-solid fa-phone"></i><span>Request callback</span></button>
+          <p style="text-align:center;color:var(--muted);font-size:.76rem;margin-top:14px;">One call, no spam, no obligation.</p>
         </form>
       </div>
     </div>
@@ -1081,9 +1045,7 @@ function toast(msg,type='ok'){
 
 // ---------- pricing pick ----------
 function pickPit(){
-  const sel=document.getElementById('cSvc');
-  sel.value='Personal career automation (Pit Crew)';
-  toast('Pit Crew selected — tell us about the task below. 100% confidential.','info');
+  toast('Pit Crew it is — drop your name and number, mention it on the call. 100% confidential.','info');
   document.getElementById('contact').scrollIntoView({behavior:'smooth'});
 }
 function pickPlan(name){
@@ -1100,42 +1062,30 @@ document.getElementById('cform').addEventListener('submit',async e=>{
   e.preventDefault();
   document.querySelectorAll('.fgrp').forEach(g=>g.classList.remove('err'));
   const name=document.getElementById('cName'),
-        email=document.getElementById('cEmail'),
-        svc=document.getElementById('cSvc'),
-        msg=document.getElementById('cMsg'),
+        phone=document.getElementById('cPhone'),
         ok=document.getElementById('cOk');
   let bad=false;
   if(!name.value.trim()){name.closest('.fgrp').classList.add('err');bad=true;}
-  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim())){email.closest('.fgrp').classList.add('err');bad=true;}
-  if(!svc.value){svc.closest('.fgrp').classList.add('err');bad=true;}
-  if(msg.value.trim().length<15){msg.closest('.fgrp').classList.add('err');bad=true;}
+  const digits=phone.value.replace(/\D/g,'');
+  if(!/^\+?[\d\s()\-]{7,17}$/.test(phone.value.trim())||digits.length<7||digits.length>15){phone.closest('.fgrp').classList.add('err');bad=true;}
   if(bad){toast('Please complete the highlighted fields.','bad');return;}
-  if(!ok.checked){toast('Please tick the consent box so we can reply to you.','bad');return;}
+  if(!ok.checked){toast('Please tick the consent box so we can call you.','bad');return;}
   const btn=document.getElementById('sendBtn');
   btn.disabled=true;btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i><span>Sending…</span>';
-  const payload={
-    name:name.value.trim(),
-    email:email.value.trim(),
-    organization:document.getElementById('cOrg').value.trim(),
-    service:svc.value,
-    message:msg.value.trim(),
-    budget:document.getElementById('cBudget').value,
-    timeline:document.getElementById('cWhen').value
-  };
   try{
     const res=await fetch('/api/contact',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(payload)
+      body:JSON.stringify({name:name.value.trim(),phone:phone.value.trim()})
     });
     const data=await res.json();
     if(res.ok&&data.ok){
-      toast(`Thanks, ${payload.name.split(' ')[0]}! Request received — reply within one business day.`,'ok');
+      toast(`Thanks, ${name.value.trim().split(' ')[0]}! We'll call you within one business day.`,'ok');
       setTimeout(()=>toast('Your reference: '+data.ref,'info'),1600);
       e.target.reset();
     }else if(data.errors){
       Object.keys(data.errors).forEach(k=>{
-        const el={name:name,email:email,service:svc,message:msg}[k];
+        const el={name:name,phone:phone}[k];
         if(el)el.closest('.fgrp').classList.add('err');
       });
       toast('Please check the highlighted fields.','bad');
@@ -1145,7 +1095,7 @@ document.getElementById('cform').addEventListener('submit',async e=>{
   }catch(err){
     toast('Network error — please check your connection and try again.','bad');
   }
-  btn.disabled=false;btn.innerHTML='<i class="fa-solid fa-paper-plane"></i><span>Send request</span>';
+  btn.disabled=false;btn.innerHTML='<i class="fa-solid fa-phone"></i><span>Request callback</span>';
 });
 
 // ---------- smooth anchors ----------

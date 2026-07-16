@@ -1,65 +1,60 @@
 """
-Formula2Solution — Flask app for Render + Supabase (Postgres)
+Formula2Solution — Flask app for Render + Turso (libSQL)
 
 Environment variables required (set in Render dashboard):
-    DATABASE_URL  -> Supabase connection string (use the *pooler* URI, port 6543)
-                     e.g. postgresql://postgres.xxxx:PASSWORD@aws-0-ap-south-1.pooler.supabase.com:6543/postgres
+    TURSO_DATABASE_URL -> from Turso dashboard / CLI, e.g.
+                          libsql://formula2solution-yourorg.turso.io
+    TURSO_AUTH_TOKEN   -> a database auth token (turso db tokens create <db>)
 Optional:
-    SECRET_KEY    -> any random string (session/security hardening)
+    ADMIN_KEY          -> random string; enables GET /api/requests listing
+    SECRET_KEY         -> any random string
 """
 
 import os
 import re
 import secrets
-from datetime import datetime, timezone
 
 from flask import Flask, render_template, request, jsonify
-import psycopg2
-from psycopg2.extras import RealDictCursor
+import libsql_client
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", secrets.token_hex(16))
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "")
+TURSO_URL = os.environ.get("TURSO_DATABASE_URL", "")
+TURSO_TOKEN = os.environ.get("TURSO_AUTH_TOKEN", "")
 
-EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
-
-ALLOWED_SERVICES = {
-    "Personal career automation (Pit Crew)",
-    "Custom software development",
-    "Process / task automation",
-    "Continuous improvement (CI / Lean)",
-    "Data & integration",
-    "Website / digital presence",
-    "Not sure yet — help me figure it out",
-}
+PHONE_RE = re.compile(r"^\+?[\d\s()\-]{7,17}$")
 
 
-def get_conn():
-    """Open a new Postgres connection (Supabase pooler handles pooling)."""
-    if not DATABASE_URL:
-        raise RuntimeError("DATABASE_URL is not set")
-    return psycopg2.connect(DATABASE_URL, sslmode="require")
+def _http_url(url: str) -> str:
+    """Use stateless HTTPS for one-shot queries (more robust than websockets
+    on platforms that sleep/scale workers, like Render's free tier)."""
+    if url.startswith("libsql://"):
+        return "https://" + url[len("libsql://"):]
+    return url
+
+
+def get_client():
+    if not TURSO_URL or not TURSO_TOKEN:
+        raise RuntimeError("TURSO_DATABASE_URL / TURSO_AUTH_TOKEN not set")
+    return libsql_client.create_client_sync(
+        url=_http_url(TURSO_URL), auth_token=TURSO_TOKEN
+    )
 
 
 def init_db():
-    """Create the contact_requests table if it doesn't exist."""
-    sql = """
-    CREATE TABLE IF NOT EXISTS contact_requests (
-        id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-        ref         TEXT UNIQUE NOT NULL,
-        created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-        name        TEXT NOT NULL,
-        email       TEXT NOT NULL,
-        organization TEXT,
-        service     TEXT NOT NULL,
-        message     TEXT NOT NULL,
-        budget      TEXT,
-        timeline    TEXT
-    );
-    """
-    with get_conn() as conn, conn.cursor() as cur:
-        cur.execute(sql)
+    with get_client() as c:
+        c.execute(
+            """
+            CREATE TABLE IF NOT EXISTS contact_requests (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                ref        TEXT UNIQUE NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                name       TEXT NOT NULL,
+                phone      TEXT NOT NULL
+            )
+            """
+        )
 
 
 @app.route("/")
@@ -69,12 +64,11 @@ def index():
 
 @app.route("/health")
 def health():
-    """Render health check. Also verifies DB connectivity."""
     try:
-        with get_conn() as conn, conn.cursor() as cur:
-            cur.execute("SELECT 1")
+        with get_client() as c:
+            c.execute("SELECT 1")
         return jsonify(status="ok", db="connected"), 200
-    except Exception as exc:  # pragma: no cover
+    except Exception as exc:
         return jsonify(status="degraded", db=str(exc)), 500
 
 
@@ -83,22 +77,14 @@ def contact():
     data = request.get_json(silent=True) or {}
 
     name = (data.get("name") or "").strip()
-    email = (data.get("email") or "").strip()
-    organization = (data.get("organization") or "").strip() or None
-    service = (data.get("service") or "").strip()
-    message = (data.get("message") or "").strip()
-    budget = (data.get("budget") or "").strip() or None
-    timeline = (data.get("timeline") or "").strip() or None
+    phone = (data.get("phone") or "").strip()
 
     errors = {}
     if not name or len(name) > 120:
         errors["name"] = "Enter your name"
-    if not EMAIL_RE.match(email) or len(email) > 254:
-        errors["email"] = "Enter a valid email"
-    if service not in ALLOWED_SERVICES:
-        errors["service"] = "Pick the closest option"
-    if len(message) < 15 or len(message) > 5000:
-        errors["message"] = "Tell us a little about the problem"
+    digits = re.sub(r"\D", "", phone)
+    if not PHONE_RE.match(phone) or not (7 <= len(digits) <= 15):
+        errors["phone"] = "Enter a valid phone number"
 
     if errors:
         return jsonify(ok=False, errors=errors), 400
@@ -106,14 +92,10 @@ def contact():
     ref = "F2S-" + secrets.token_hex(3).upper()
 
     try:
-        with get_conn() as conn, conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO contact_requests
-                    (ref, name, email, organization, service, message, budget, timeline)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                """,
-                (ref, name, email, organization, service, message, budget, timeline),
+        with get_client() as c:
+            c.execute(
+                "INSERT INTO contact_requests (ref, name, phone) VALUES (?, ?, ?)",
+                [ref, name, phone],
             )
     except Exception:
         app.logger.exception("Failed to store contact request")
@@ -124,31 +106,24 @@ def contact():
 
 @app.route("/api/requests", methods=["GET"])
 def list_requests():
-    """
-    Simple protected listing of recent submissions.
-    Call with header:  X-Admin-Key: <ADMIN_KEY env var>
-    (For anything serious, view rows in the Supabase dashboard instead.)
-    """
+    """Recent submissions. Call with header:  X-Admin-Key: <ADMIN_KEY>"""
     admin_key = os.environ.get("ADMIN_KEY")
     if not admin_key or request.headers.get("X-Admin-Key") != admin_key:
         return jsonify(ok=False, error="Unauthorized"), 401
-    with get_conn() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute(
-            "SELECT ref, created_at, name, email, organization, service, budget, timeline, message "
-            "FROM contact_requests ORDER BY created_at DESC LIMIT 100"
+    with get_client() as c:
+        rs = c.execute(
+            "SELECT ref, created_at, name, phone FROM contact_requests "
+            "ORDER BY id DESC LIMIT 100"
         )
-        rows = cur.fetchall()
-    for r in rows:
-        if isinstance(r.get("created_at"), datetime):
-            r["created_at"] = r["created_at"].astimezone(timezone.utc).isoformat()
+        rows = [dict(zip(rs.columns, r)) for r in rs.rows]
     return jsonify(ok=True, count=len(rows), requests=rows)
 
 
-# Initialize table on startup (safe: CREATE IF NOT EXISTS)
-if DATABASE_URL:
+# Create table on startup (safe: IF NOT EXISTS)
+if TURSO_URL and TURSO_TOKEN:
     try:
         init_db()
-    except Exception:  # don't block boot if DB is briefly unreachable
+    except Exception:
         app.logger.exception("init_db failed at startup")
 
 
