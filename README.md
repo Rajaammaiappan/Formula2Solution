@@ -73,6 +73,36 @@ export TURSO_AUTH_TOKEN="<token>"
 python app.py   # -> http://localhost:5000
 ```
 
+
+## Lead notifications (email + WhatsApp)
+
+Both are optional and controlled purely by environment variables — the form
+works fine without them.
+
+### Email (Gmail — 5 minutes)
+1. Google Account → Security → enable **2-Step Verification** (required).
+2. Google Account → Security → **App passwords** → create one for "Mail".
+   You get a 16-character password.
+3. Set in Render → Environment:
+   - `SMTP_USER` = your Gmail address
+   - `SMTP_PASS` = the 16-char app password
+   - `NOTIFY_EMAIL_TO` = where alerts should arrive (can be the same Gmail)
+
+### WhatsApp (CallMeBot — free, personal use)
+1. Save the CallMeBot number **+34 644 71 81 99** in your phone contacts.
+2. Send it the WhatsApp message: `I allow callmebot to send me messages`
+3. It replies with your personal API key.
+4. Set in Render → Environment:
+   - `CALLMEBOT_PHONE` = your WhatsApp number with country code (e.g. `+9198xxxxxxxx`)
+   - `CALLMEBOT_APIKEY` = the key from the reply
+
+> CallMeBot is an unofficial free service — great for personal alerts, but if
+> it ever matters for business SLAs, upgrade to the official WhatsApp Cloud
+> API or Twilio later (the code change is one function).
+
+Notifications run in a background thread, so a mail/WhatsApp outage can never
+slow down or fail a visitor's form submission — errors are only logged.
+
 ## Notes
 - **Python version:** pinned to 3.12.3 via `.python-version`. If Render was
   configured before this file existed, add env var `PYTHON_VERSION=3.12.3`

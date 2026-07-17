@@ -13,6 +13,11 @@ Optional:
 import os
 import re
 import secrets
+import smtplib
+import threading
+import urllib.parse
+import urllib.request
+from email.message import EmailMessage
 
 from flask import Flask, render_template, request, jsonify
 import libsql_client
@@ -24,6 +29,72 @@ TURSO_URL = os.environ.get("TURSO_DATABASE_URL", "")
 TURSO_TOKEN = os.environ.get("TURSO_AUTH_TOKEN", "")
 
 PHONE_RE = re.compile(r"^\+?[\d\s()\-]{7,17}$")
+
+# ---------------------------------------------------------------------------
+# Notifications (all optional — enabled only when the env vars are set)
+#
+# Email via Gmail SMTP:
+#   SMTP_USER        -> your Gmail address (the sender)
+#   SMTP_PASS        -> a Gmail App Password (NOT your normal password)
+#   NOTIFY_EMAIL_TO  -> where to receive lead alerts (can be the same address)
+#   SMTP_HOST / SMTP_PORT (optional, default smtp.gmail.com:587)
+#
+# WhatsApp via CallMeBot (free, for personal notifications):
+#   CALLMEBOT_PHONE  -> your WhatsApp number with country code, e.g. +9198xxxxxx
+#   CALLMEBOT_APIKEY -> key you receive after messaging the CallMeBot number once
+# ---------------------------------------------------------------------------
+
+def _send_email(subject: str, body: str):
+    user = os.environ.get("SMTP_USER")
+    pwd = os.environ.get("SMTP_PASS")
+    to = os.environ.get("NOTIFY_EMAIL_TO")
+    if not (user and pwd and to):
+        return
+    host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+    port = int(os.environ.get("SMTP_PORT", "587"))
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = user
+    msg["To"] = to
+    msg.set_content(body)
+    with smtplib.SMTP(host, port, timeout=20) as s:
+        s.starttls()
+        s.login(user, pwd)
+        s.send_message(msg)
+
+
+def _send_whatsapp(text: str):
+    phone = os.environ.get("CALLMEBOT_PHONE")
+    apikey = os.environ.get("CALLMEBOT_APIKEY")
+    if not (phone and apikey):
+        return
+    url = (
+        "https://api.callmebot.com/whatsapp.php?"
+        + urllib.parse.urlencode({"phone": phone, "text": text, "apikey": apikey})
+    )
+    urllib.request.urlopen(url, timeout=20)
+
+
+def notify_new_lead(ref: str, name: str, phone: str):
+    """Fire-and-forget notifications; failures are logged, never user-facing."""
+    subject = f"New callback request {ref} — {name}"
+    body = (
+        f"New lead on formula2solution:\n\n"
+        f"Reference: {ref}\nName: {name}\nPhone: {phone}\n\n"
+        f"Call them back within one business day."
+    )
+
+    def _run():
+        try:
+            _send_email(subject, body)
+        except Exception:
+            app.logger.exception("Email notification failed")
+        try:
+            _send_whatsapp(f"F2S lead {ref}: {name} — {phone}")
+        except Exception:
+            app.logger.exception("WhatsApp notification failed")
+
+    threading.Thread(target=_run, daemon=True).start()
 
 
 def _http_url(url: str) -> str:
@@ -101,6 +172,7 @@ def contact():
         app.logger.exception("Failed to store contact request")
         return jsonify(ok=False, error="Could not save your request. Please try again."), 500
 
+    notify_new_lead(ref, name, phone)
     return jsonify(ok=True, ref=ref), 201
 
 

@@ -16,5 +16,15 @@ services:
         generateValue: true
       - key: ADMIN_KEY
         generateValue: true
+      - key: SMTP_USER
+        sync: false          # your Gmail address (sender)
+      - key: SMTP_PASS
+        sync: false          # Gmail App Password (16 chars)
+      - key: NOTIFY_EMAIL_TO
+        sync: false          # where lead alerts go (can equal SMTP_USER)
+      - key: CALLMEBOT_PHONE
+        sync: false          # optional: your WhatsApp number, e.g. +9198xxxxxxxx
+      - key: CALLMEBOT_APIKEY
+        sync: false          # optional: CallMeBot API key
       - key: PYTHON_VERSION
         value: 3.12.3
